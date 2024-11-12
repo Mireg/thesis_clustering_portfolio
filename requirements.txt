@@ -1,6 +1,4 @@
 requests
 beautifulsoup4
 pandas
-yfinance
-quandl
 python-dotenv
