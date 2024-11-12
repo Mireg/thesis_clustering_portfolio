@@ -1,3 +1,6 @@
 requests
-BeautifulSoup
+beautifulsoup4
 pandas
+yfinance
+quandl
+python-dotenv
