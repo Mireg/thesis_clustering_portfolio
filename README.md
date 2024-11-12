@@ -1,1 +1,1 @@
-# thesis_clustering_portfolio
+A repository for my masters thesis regarding using clustering methods for portfolio selection
