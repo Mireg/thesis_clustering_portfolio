@@ -1,0 +1,39 @@
+import yfinance as yf
+import pandas as pd
+
+def get_financial_data(tickers, start_date="2010-01-01"):
+    financial_data = []
+
+    start_date = pd.to_datetime(start_date)
+
+    for i, ticker in enumerate(tickers):
+        company = yf.Ticker(ticker)
+        print(f'Fetching data for {ticker} ({i+1})')
+        financials = company.financials
+        financials.columns = pd.to_datetime(financials.columns, errors='coerce')
+        financials = financials.loc[:, financials.columns >= start_date]
+        financials['Ticker'] = ticker
+        financial_data.append(financials)
+
+    if financial_data:
+        combined_data = pd.concat(financial_data, axis=0)
+        combined_data.reset_index(inplace=True)
+
+        if 'Date' not in combined_data.columns:
+            combined_data['Date'] = combined_data.index
+
+        combined_data.set_index(['Ticker', 'Date'], inplace=True)
+        return combined_data
+    else:
+        return None
+
+#tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA']
+tickers = pd.read_csv('Data/sp500_tickers.csv')['Ticker'].tolist()
+
+financials_data = get_financial_data(tickers, start_date="2010-01-01")
+
+if financials_data is not None:
+    financials_data.to_csv("Data/financials_data_yf.csv", index=True)
+    print("Data saved to 'Data/financials_data_yf.csv'")
+else:
+    print("No data to save")
