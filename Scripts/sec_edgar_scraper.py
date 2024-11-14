@@ -17,7 +17,7 @@ class SECEdgarFetcher:
         }
         self.cik_map = pd.read_csv(cik_map_file, dtype={'cik': str}).set_index('ticker')['cik'].to_dict()
         self.raw_data = [] 
-    print(os.environ.get('SEC_AGENT'))
+
     def get_financial_statements(self, ticker, output_dir="sec_data/json"):
         """Fetch financial statements for a given ticker and save the raw JSON."""
         if ticker not in self.cik_map:
@@ -46,12 +46,63 @@ class SECEdgarFetcher:
             
             # Key financial metrics to extract
             metric_tag_mapping = {
-                'Assets': ['Assets', 'CurrentAssets', 'NonCurrentAssets'],
-                'Liabilities': ['Liabilities', 'CurrentLiabilities', 'NonCurrentLiabilities'],
-                'Revenues': ['Revenues', 'SalesRevenueNet', 'OperatingRevenue'],
-                'NetIncomeLoss': ['NetIncomeLoss', 'NetEarnings', 'ProfitOrLoss'],
-                'GrossProfit': ['GrossProfit', 'GrossMargin']
+                'Revenue': [
+                    'Revenues',
+                    'RevenueFromContractWithCustomerExcludingAssessedTax',
+                    'SalesRevenueGoodsNet',
+                    'SalesRevenueNet'
+                ],
+                
+                'OperatingIncome': [
+                    'OperatingIncomeLoss',
+                    'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest'
+                ],
+                
+                'GrossProfit': [
+                    'GrossProfit'
+                ],
+                
+                'ResearchAndDevelopment': [
+                    'ResearchAndDevelopmentExpense'
+                ],
+                
+                'OperatingExpenses': [
+                    'OperatingExpenses',
+                    'OperatingCostsAndExpenses'
+                ],
+                
+                'NetIncomeLoss': [
+                    'NetIncomeLoss',
+                    'ProfitLoss'
+                ],
+                
+                'EPS': [
+                    'EarningsPerShareBasic',
+                    'EarningsPerShareDiluted'
+                ],
+                
+                'SellingGeneral': [
+                    'SellingGeneralAndAdministrativeExpense'
+                ],
+                
+                'CostOfRevenue': [
+                    'CostOfGoodsAndServicesSold',
+                    'CostOfRevenue',
+                    'CostOfServices'
+                ],
+
+                'Restructuring': [
+                    'RestructuringCharges',
+                    'RestructuringCosts'
+                ],
+
+                'OperatingExpense': [
+                    'OperatingExpenses',
+                    'GeneralAndAdministrativeExpense',
+                    'SellingAndMarketingExpense'
+                ]
             }
+            
             ticker_data = []
             
             for metric, tags in metric_tag_mapping.items():
@@ -126,7 +177,8 @@ def main():
     fetcher = SECEdgarFetcher()
 
     # List of companies to fetch
-    tickers = ['AAPL', 'MSFT', 'GOOGL']
+    #tickers = ['AAPL', 'MSFT', 'GOOGL']
+    tickers = pd.read_csv('Data/sp500_tickers.csv')['Ticker'].tolist()
     
     # Step 1: Fetch data for all tickers and save raw data
     raw_data = fetcher.fetch_all(tickers)
