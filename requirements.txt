@@ -3,3 +3,5 @@ beautifulsoup4
 pandas
 python-dotenv
 matplotlib
+sec_cik_mapper
+ipykernel
