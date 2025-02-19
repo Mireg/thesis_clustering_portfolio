@@ -80,7 +80,7 @@ def main():
     
     df = analyzer.get_frequency_dataframe()
     
-    output_file = "C:/Users/user/Repos/thesis_clustering_portfolio/Data/sec_data/tag_frequencies.csv"
+    output_file = "./Data/sec_data/tag_frequencies.csv"
     print(f"Saving results to {output_file}...")
     df.to_csv(output_file, index=False)
     

@@ -1,4 +1,4 @@
 .env
 thesis_venv
 __pycache__
-json
+Data/sec_data/json/*
