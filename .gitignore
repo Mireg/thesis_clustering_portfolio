@@ -1,4 +1,4 @@
 .env
-.venv
+thesis_venv
 __pycache__
 json
