@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class SECEdgarFetcher:
-    def __init__(self, cik_map_file="./Data/company_tickers.csv"):
+    def __init__(self, cik_map_file="./Data/company_tickers_2010_full.csv"):
         self.base_url = "https://data.sec.gov/api/xbrl/companyfacts/CIK{}.json"
         self.headers = {
             'User-Agent': str(os.environ.get('SEC_AGENT')),
