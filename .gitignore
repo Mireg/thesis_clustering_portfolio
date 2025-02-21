@@ -3,3 +3,4 @@ thesis_venv
 __pycache__
 Data/sec_data/json/*
 *.zip
+notes.md

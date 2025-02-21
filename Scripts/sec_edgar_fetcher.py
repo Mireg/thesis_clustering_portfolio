@@ -8,14 +8,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class SECEdgarFetcher:
-    def __init__(self, cik_map_file="./Data/company_tickers_2010_full.csv"):
+    def __init__(self, cik_map_file="./Data/combined_company_tickers.csv"):
         self.base_url = "https://data.sec.gov/api/xbrl/companyfacts/CIK{}.json"
         self.headers = {
             'User-Agent': str(os.environ.get('SEC_AGENT')),
             'Accept-Encoding': 'gzip, deflate',
             'Host': 'data.sec.gov'
         }
-        self.cik_map = pd.read_csv(cik_map_file, dtype={'cik': str}).set_index('ticker')['cik'].map(lambda x: x.zfill(10)).to_dict()
+        self.cik_map = pd.read_csv(cik_map_file, dtype={'cik': str}).set_index('ticker')['cik'].map(lambda x: str(x).zfill(10)).to_dict()
         self.raw_data = []
 
     def get_financial_statements(self, ticker, output_dir="./Data/sec_data/json"):
@@ -47,44 +47,50 @@ class SECEdgarFetcher:
             with open(json_file, 'w') as f:
                 json.dump(data, f, indent=2)
             
-            facts = data.get('facts', {})
-            us_gaap = facts.get('us-gaap', {})
-            
+            # Updated metric mapping based on high coverage tags
             metric_tag_mapping = {
-                # Balance Sheet
+                # Balance Sheet (High Coverage)
                 'Assets': ['Assets'],
                 'Liabilities': ['LiabilitiesAndStockholdersEquity'],
                 'StockholdersEquity': ['StockholdersEquity'],
-                'Goodwill': ['Goodwill'],
+                'CashAndEquivalents': ['CashAndCashEquivalentsAtCarryingValue'],
+                'RetainedEarnings': ['RetainedEarningsAccumulatedDeficit'],
                 'PPE': ['PropertyPlantAndEquipmentNet'],
                 'CurrentAssets': ['AssetsCurrent'],
                 'CurrentLiabilities': ['LiabilitiesCurrent'],
                 'LongTermDebt': ['LongTermDebt'],
+                'Goodwill': ['Goodwill'],
                 
-                # Cash Flow
+                # Cash Flow (High Coverage)
                 'OperatingCashFlow': ['NetCashProvidedByUsedInOperatingActivities'],
                 'FinancingCashFlow': ['NetCashProvidedByUsedInFinancingActivities'],
                 'InvestingCashFlow': ['NetCashProvidedByUsedInInvestingActivities'],
                 'CapEx': ['PaymentsToAcquirePropertyPlantAndEquipment'],
+                'CashFromOps': ['NetCashProvidedByUsedInContinuingOperations'],
                 
-                # Income Statement
+                # Income Statement (High Coverage)
+                'NetIncome': ['NetIncomeLoss', 'ProfitLoss'],
                 'Revenue': ['Revenues', 'RevenueFromContractWithCustomerExcludingAssessedTax', 'SalesRevenueNet'],
                 'OperatingIncome': ['OperatingIncomeLoss'],
-                'NetIncome': ['NetIncomeLoss', 'ProfitLoss'],
                 'GrossProfit': ['GrossProfit'],
+                'COGS': ['CostOfGoodsAndServicesSold', 'CostOfRevenue'],
                 'OperatingExpenses': ['OperatingExpenses', 'OperatingCostsAndExpenses'],
                 'RnD': ['ResearchAndDevelopmentExpense'],
                 'SGA': ['SellingGeneralAndAdministrativeExpense'],
-                'COGS': ['CostOfGoodsAndServicesSold', 'CostOfRevenue'],
                 'InterestExpense': ['InterestExpense'],
                 'IncomeTax': ['IncomeTaxExpenseBenefit'],
                 
-                # Additional Metrics
+                # Additional High Coverage Metrics
+                'DilutedShares': ['WeightedAverageNumberOfDilutedSharesOutstanding'],
+                'WeightedShares': ['WeightedAverageNumberOfSharesOutstandingBasic'],
                 'ShareBasedComp': ['ShareBasedCompensation'],
                 'Amortization': ['AmortizationOfIntangibleAssets'],
-                'WeightedShares': ['WeightedAverageNumberOfSharesOutstandingBasic'],
-                'DilutedShares': ['WeightedAverageNumberOfDilutedSharesOutstanding']
+                'AccumulatedOCI': ['AccumulatedOtherComprehensiveIncomeLossNetOfTax'],
+                'DeferredTax': ['DeferredIncomeTaxExpenseBenefit']
             }
+            
+            facts = data.get('facts', {})
+            us_gaap = facts.get('us-gaap', {})
             
             ticker_data = []
             
@@ -150,7 +156,7 @@ class SECEdgarFetcher:
         return pivoted
 
 def main():
-    tickers = pd.read_csv('./Data/sp500_tickers_2010.csv')['Ticker'].tolist()
+    tickers = pd.read_csv('./Data/sp500_tickers_2025.csv')['Ticker'].tolist()
     fetcher = SECEdgarFetcher()
     raw_data = fetcher.fetch_all(tickers)
     pivoted_df = fetcher.pivot_data(raw_data)
