@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from scipy import stats
 
 # Data is NMAR, shouldn't ignore missing values
 def analyze_missing_patterns(df):
@@ -118,11 +117,13 @@ def impute_final_features(feature_df, pattern_df):
     """
     df = feature_df.copy()
     
-    # 1. Size-based grouping for more accurate imputation
-    df['size_category'] = pd.qcut(df['log_assets'].fillna(df['log_assets'].median()), 
-                                q=5, labels=['vs', 's', 'm', 'l', 'vl'])
+    # 1. First impute log_assets since we use it for size categories
+    df['log_assets'] = df['log_assets'].fillna(df['log_assets'].median())
     
-    # 2. Impute different feature groups
+    # 2. Size-based grouping for more accurate imputation
+    df['size_category'] = pd.qcut(df['log_assets'], q=5, labels=['vs', 's', 'm', 'l', 'vl'])
+    
+    # 3. Impute different feature groups
     # Ratio features - median within size category
     ratio_features = [col for col in df.columns if col.startswith(('avg_', 'ROA', 'ROE'))]
     for col in ratio_features:
@@ -140,12 +141,25 @@ def impute_final_features(feature_df, pattern_df):
     vol_features = [col for col in df.columns if 'volatility' in col]
     for col in vol_features:
         df[col] = df[col].fillna(df[col].median())
+        
+    # Operating metrics - median within size category with flag
+    operating_features = ['capex_intensity']
+    for col in operating_features:
+        df[f'{col}_imputed'] = df[col].isna().astype(int)
+        df[col] = df.groupby('size_category')[col].transform(
+            lambda x: x.fillna(x.median())
+        )
     
-    # 3. Remove temporary columns
+    # 4. Remove temporary columns
     df = df.drop('size_category', axis=1)
     
-    # 4. Combine with pattern features
+    # 6. Combine with pattern features
     df = pd.concat([df, pattern_df], axis=1)
+    
+    # 7. Verify no missing values remain
+    missing = df.isna().sum()
+    if missing.any():
+        print("Warning: Missing values remain in columns:", missing[missing > 0].index.tolist())
     
     return df
 
