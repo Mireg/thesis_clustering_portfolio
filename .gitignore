@@ -1,6 +1,6 @@
 .env
 thesis_venv
 __pycache__
-/data/intermidiate/json/*
+/data/intermediate/json/*
 *.zip
 notes.md
