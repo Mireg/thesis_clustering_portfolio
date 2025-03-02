@@ -1,0 +1,31 @@
+{
+  "os":  "Linux-6.1.0-31-amd64-x86_64-with-glibc2.36",
+  "python":  "CPython 3.10.13",
+  "startedAt":  "2025-03-02T00:02:57.620244Z",
+  "program":  "/home/mireg/Repos/thesis_clustering_portfolio/models/clustering_pipeline.py",
+  "codePath":  "models/clustering_pipeline.py",
+  "git":  {
+    "remote":  "https://github.com/Mireg/thesis_clustering_portfolio.git",
+    "commit":  "ff815a00c3d95f3c026d213b78e0f27afc14b645"
+  },
+  "email":  "k.miranowski@gmail.com",
+  "root":  "/home/mireg/Repos/thesis_clustering_portfolio",
+  "host":  "debian",
+  "executable":  "/home/mireg/Repos/thesis_clustering_portfolio/thesis_venv/bin/python",
+  "codePathLocal":  "models/clustering_pipeline.py",
+  "cpu_count":  6,
+  "cpu_count_logical":  12,
+  "disk":  {
+    "/":  {
+      "total":  "152671330304",
+      "used":  "81797332992"
+    }
+  },
+  "memory":  {
+    "total":  "24969543680"
+  },
+  "cpu":  {
+    "count":  6,
+    "countLogical":  12
+  }
+}
