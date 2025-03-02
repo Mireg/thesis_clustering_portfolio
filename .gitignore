@@ -4,5 +4,5 @@ __pycache__
 /data/intermediate/json/*
 *.zip
 notes.md
-/wandb/*
+wandb/
 *.wandb
