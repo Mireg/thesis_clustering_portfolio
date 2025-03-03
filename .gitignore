@@ -1,7 +1,7 @@
 .env
 thesis_venv
 __pycache__
-/data/intermediate/json/*
+data/intermediate/json/*
 *.zip
 notes.md
 wandb/

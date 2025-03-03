@@ -1,9 +1,13 @@
+import wandb
 import pandas as pd
-import numpy as np
+from dotenv import load_dotenv
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
 from wandb_utils import init_wandb_run, log_clustering_metrics
-from clustering_configs import EXPERIMENTS
+from configs import EXPERIMENTS
+
+load_dotenv()
+wandb.login()
 
 def run_experiment(config):
     df = pd.read_csv('./data/processed/financial_features_2010.csv')
