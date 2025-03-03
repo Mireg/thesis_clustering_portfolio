@@ -7,3 +7,4 @@ sec_cik_mapper
 ipykernel
 seaborn
 scipy
+wandb
