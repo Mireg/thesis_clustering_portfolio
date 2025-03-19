@@ -13,23 +13,21 @@ load_dotenv()
 wandb.login()
 
 
-def get_feature_set(group_name):
-    if group_name == 'all':
-        # Combine all features, remove duplicates
-        all_features = []
-        for features in FEATURE_GROUPS.values():
-            all_features.extend(features)
-        return list(dict.fromkeys(all_features))  # remove duplicates
+def select_features(df, variance_threshold=0.01, correlation_threshold=0.7):
+    features = df.drop(['Unnamed: 0'], axis=1, errors='ignore')
     
-    if '_and_' in group_name:
-        # Combine specified groups
-        groups = group_name.split('_and_')
-        features = []
-        for group in groups:
-            features.extend(FEATURE_GROUPS[group])
-        return list(dict.fromkeys(features)) 
+    variances = features.var()
+    high_variance_features = variances[variances > variance_threshold].index.tolist()
     
-    return FEATURE_GROUPS[group_name]
+    high_var_df = features[high_variance_features]
+    corr_matrix = high_var_df.corr().abs()
+
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+    to_drop = [column for column in upper.columns if any(upper[column] > correlation_threshold)]
+    
+    selected_features = [col for col in high_variance_features if col not in to_drop]
+    
+    return selected_features
 
 def train():
     # Initialize wandb with sweep config
@@ -38,13 +36,17 @@ def train():
     df = pd.read_csv('data/processed/financial_features_2010.csv')
     
     # Get features for this run
-    #features = get_feature_set(run.config.feature_groups)
-    features = [col for col in df.columns if col != 'Unnamed: 0' and not pd.isna(col)]
+    selected_features = select_features(
+        df,
+        variance_threshold=run.config.variance_threshold,
+        correlation_threshold=run.config.correlation_threshold
+    )
 
     # Log which features we're using
-    wandb.log({"feature_count": len(features)})
+    wandb.log({"feature_count": len(selected_features),
+               "selected_features": selected_features})
     
-    X = df[features].values
+    X = df[selected_features].values
 
     # Scaling
     if run.config.preprocessing == 'standard':
@@ -133,7 +135,7 @@ def main():
     sweep_id = wandb.sweep(sweep_config, project="thesis_clustering_portfolio")
     
     # Run the sweep
-    wandb.agent(sweep_id, train, count=20)  # No. of experiments
+    wandb.agent(sweep_id, train, count=100)  # No. of experiments
 
 if __name__ == "__main__":
     main()

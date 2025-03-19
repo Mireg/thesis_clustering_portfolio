@@ -47,7 +47,13 @@ sweep_config = {
         },
         'n_clusters': {
             'min': 3,
-            'max': 10
+            'max': 50
+        },
+        'variance_threshold': {
+            'values': [0.01, 0.02, 0.3, 0.05, 0.01]
+        },
+        'correlation_threshold': {
+            'values': [0.65, 0.7, 0.8, 0.9]
         },
         'use_pca': {
             'values': [True, False]
@@ -57,7 +63,7 @@ sweep_config = {
         },
         # KMeans specific parameters
         'kmeans_max_iter': {
-            'values': [200, 300, 500]
+            'values': [300, 500, 1000]
         },
         # Hierarchical specific parameters
         'linkage': {
@@ -65,10 +71,11 @@ sweep_config = {
         },
         # DBSCAN specific parameters
         'eps': {
-            'min': 0.3,
+            'min': 0.2,
             'max': 1.5
         },
         'min_samples': {
+            'distribution': 'int_uniform',
             'min': 3,
             'max': 10
         }
