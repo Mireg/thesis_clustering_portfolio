@@ -35,49 +35,49 @@ FEATURE_GROUPS = {
 sweep_config = {
     'method': 'bayes',  # 'grid', 'random' or 'bayes'
     'metric': {
-        'name': 'silhouette_score',
+        'name': 'combined_score',
         'goal': 'maximize'
     },
     'parameters': {
         'preprocessing': {
-            'values': ['standard', 'robust'] # Scaling approaches
+            'values': ['standard'] # Scaling approaches
         },
         'algorithm': {
-            'values': ['kmeans', 'hierarchical', 'dbscan']  #'dbscan' later
+            'values': ['hierarchical']
         },
         'n_clusters': {
             'min': 3,
             'max': 50
         },
         'variance_threshold': {
-            'values': [0.01, 0.02, 0.3, 0.05, 0.01]
+            'values': [0.02]
         },
         'correlation_threshold': {
-            'values': [0.65, 0.7, 0.8, 0.9]
+            'values': [0.8]
         },
         'use_pca': {
-            'values': [True, False]
+            'values': [True]
         },
         'pca_variance': {
-            'values': [0.7, 0.8, 0.9, 0.95]
+            'values': [0.8, 0.9, 0.95]
         },
         # KMeans specific parameters
         'kmeans_max_iter': {
-            'values': [300, 500, 1000]
+            'values': [500, 1000, 1250]
         },
         # Hierarchical specific parameters
         'linkage': {
-            'values': ['ward', 'complete', 'average']
+            'values': ['ward']
         },
         # DBSCAN specific parameters
         'eps': {
-            'min': 0.2,
-            'max': 1.5
+            'min': 0.3,
+            'max': 1.2
         },
         'min_samples': {
             'distribution': 'int_uniform',
-            'min': 3,
-            'max': 10
+            'min': 5,
+            'max': 30
         }
     }
 }
