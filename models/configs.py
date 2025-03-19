@@ -33,35 +33,44 @@ FEATURE_GROUPS = {
 }
 
 sweep_config = {
-    'method': 'random',  # 'grid', 'random' or 'bayes'
+    'method': 'bayes',  # 'grid', 'random' or 'bayes'
     'metric': {
         'name': 'silhouette_score',
         'goal': 'maximize'
     },
     'parameters': {
+        'preprocessing': {
+            'values': ['standard', 'robust'] # Scaling approaches
+        },
         'algorithm': {
-            'values': ['kmeans', 'hierarchical']  # add 'dbscan' later
+            'values': ['kmeans', 'hierarchical', 'dbscan']  #'dbscan' later
         },
         'n_clusters': {
             'min': 3,
             'max': 10
         },
-        'feature_groups': {
-            'values': [
-                'basic',
-                'profitability',
-                'efficiency',
-                'basic_and_profitability',  # combinations
-                'all'
-            ]
+        'use_pca': {
+            'values': [True, False]
+        },
+        'pca_variance': {
+            'values': [0.7, 0.8, 0.9, 0.95]
         },
         # KMeans specific parameters
         'kmeans_max_iter': {
-            'values': [100, 200, 300]
+            'values': [200, 300, 500]
         },
         # Hierarchical specific parameters
         'linkage': {
             'values': ['ward', 'complete', 'average']
+        },
+        # DBSCAN specific parameters
+        'eps': {
+            'min': 0.3,
+            'max': 1.5
+        },
+        'min_samples': {
+            'min': 3,
+            'max': 10
         }
     }
 }
