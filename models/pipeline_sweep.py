@@ -247,4 +247,4 @@ def train():
 
 
 if __name__ == "__main__":
-    wandb.agent(wandb.sweep(sweep_config), train, count=50)
+    wandb.agent(wandb.sweep(sweep_config), train, count=150)
