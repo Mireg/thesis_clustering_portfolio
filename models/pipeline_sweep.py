@@ -1,210 +1,250 @@
-from dotenv import load_dotenv
 import wandb
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
-from configs import FEATURE_GROUPS, sweep_config
-from sklearn import metrics
 from sklearn.decomposition import PCA
+from sklearn import metrics
+from dotenv import load_dotenv
+from configs import FEATURE_GROUPS, sweep_config
 
-
+# Load env variables and login
 load_dotenv()
 wandb.login()
 
-
-def select_features(df, variance_threshold=0.01, correlation_threshold=0.7):
-    features = df.drop(['Unnamed: 0'], axis=1, errors='ignore')
+def select_features(df, variance_threshold=0.01, correlation_threshold=0.7, top_n=None):
+    ticker_col = None
+    if 'Unnamed: 0' in df.columns:
+        ticker_col = 'Unnamed: 0'
     
+    numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+    features = df[numeric_cols]
+    
+    if ticker_col and ticker_col in features.columns:
+        features = features.drop(columns=[ticker_col])
+    
+    # Feature selection - variance
     variances = features.var()
-    high_variance_features = variances[variances > variance_threshold].index.tolist()
-    
-    high_var_df = features[high_variance_features]
-    corr_matrix = high_var_df.corr().abs()
-
+    high_variance = variances[variances > variance_threshold].index.tolist()
+    # Feature selection - correlation
+    corr_matrix = df[high_variance].corr().abs()
     upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-    to_drop = [column for column in upper.columns if any(upper[column] > correlation_threshold)]
+    to_drop = [col for col in upper.columns if any(upper[col] > correlation_threshold)]
     
-    selected_features = [col for col in high_variance_features if col not in to_drop]
-    
-    return selected_features
+    selected = [col for col in high_variance if col not in to_drop]
+    return selected[:top_n] if top_n else selected
 
-def determine_optimal_k(X, max_k=20):
-    results = []
+def calculate_wcss_bcss(X, labels):
+    valid_mask = labels != -1
+    if np.sum(valid_mask) == 0:
+        return 0.0, 0.0
     
-    sse = []
-    silhouette_avg = []
-    ch_scores = []
+    clustered_X = X[valid_mask]
+    clustered_labels = labels[valid_mask]
     
-    k_range = range(2, max_k+1)
-    for k in k_range:
-        kmeans = KMeans(n_clusters=k, random_state=42)
-        labels = kmeans.fit_predict(X)
-        
-        sse.append(kmeans.inertia_)
-        silhouette_avg.append(metrics.silhouette_score(X, labels))
-        ch_scores.append(metrics.calinski_harabasz_score(X, labels))
-        results.append([k, kmeans.inertia_, metrics.silhouette_score(X, labels), 
-                     metrics.calinski_harabasz_score(X, labels)])
+    unique_labels, counts = np.unique(clustered_labels, return_counts=True)
+    if len(unique_labels) < 1:
+        return 0.0, 0.0
     
-    table = wandb.Table(columns=["k", "sse", "silhouette", "calinski_harabasz"], 
-                       data=results)
+    centroids = np.array([clustered_X[clustered_labels == l].mean(0) for l in unique_labels])
+    global_centroid = clustered_X.mean(0)
     
-    wandb.log({
-        "optimal_k_analysis": table,
-        "optimal_k_plot": wandb.plot.line(
-            table, "k", "calinski_harabasz", title="Calinski-Harabasz Score by K")
+    # WCSS calculation
+    diffs = clustered_X - centroids[clustered_labels]
+    wcss = np.sum(np.square(diffs))
+    
+    # BCSS calculation
+    centroid_diffs = centroids - global_centroid
+    bcss = np.sum(counts * np.sum(np.square(centroid_diffs), axis=1))
+    
+    return wcss, bcss
+
+def calculate_combined_score(metrics_dict):
+    # Metrics normalization to avoid domination from one metric
+    silhouette = metrics_dict.get('silhouette', 0)  # Range: [-1, 1] 
+    # Rescaling silhouette from [-1,1] to [0,1]
+    silhouette = (silhouette + 1) / 2
+    
+    # Log-transform Calinski-Harabasz for better scaling with outliers
+    # It can take any value and can easily dominate other metrics
+    calinski = metrics_dict.get('calinski', 0)
+    calinski_normalized = np.log1p(calinski) / np.log1p(5000) 
+    calinski_normalized = min(1.0, calinski_normalized)
+    
+    # Conversion of Davies-Bouldin (lower is better) to [0, 1] scale
+    db_inverted = 1 / (1 + metrics_dict.get('db_score', 10))
+     
+    wcss = metrics_dict.get('wcss', 0)
+    bcss = metrics_dict.get('bcss', 0)
+
+    # Separation ratio normalized to [0,1]
+    separation_ratio = bcss / (wcss + bcss + 1e-8)  # epsilon avoids division by zero, unlikely but good practice
+    separation_ratio = min(1.0, separation_ratio)
+    
+    return (0.35 * silhouette + 
+            0.25 * calinski_normalized + 
+            0.20 * db_inverted + 
+            0.20 * separation_ratio)
+
+def calculate_metrics(X, labels):
+    metrics_dict = {}
+    wcss, bcss = calculate_wcss_bcss(X, labels)
+    metrics_dict.update({
+        'wcss': wcss,
+        'bcss': bcss,
+        'explained_variance': bcss/(wcss + bcss) if (wcss + bcss) != 0 else 0
     })
     
-    # Find optimal K using CH scores
-    ch_k = k_range[np.argmax(ch_scores)]
-    return ch_k
+    unique_labels = np.unique(labels)
+    if len(unique_labels) > 1:
+        mask = labels != -1
+        if np.sum(mask) > 1:
+            metrics_dict.update({
+                'silhouette': metrics.silhouette_score(X[mask], labels[mask]),
+                'calinski': metrics.calinski_harabasz_score(X[mask], labels[mask]),
+                'db_score': metrics.davies_bouldin_score(X[mask], labels[mask]),
+                'num_clusters': len(unique_labels) - (1 if -1 in unique_labels else 0),
+                'noise_pct': np.mean(labels == -1)*100
+            })
+    
+    metrics_dict['combined_score'] = calculate_combined_score(metrics_dict)
+    return metrics_dict
+
+def log_cluster_info(df, features, labels):
+    df_out = df.copy()
+    df_out['cluster'] = labels
+    
+    # Log cluster sizes
+    cluster_counts = pd.Series(labels).value_counts().sort_index()
+    cluster_sizes = {f"cluster_{k}": v for k, v in cluster_counts.items()}
+    wandb.log({"cluster_sizes": cluster_sizes})
+    
+    # Log cluster assignments
+    assignments_table = wandb.Table(dataframe=df_out[['ticker', 'cluster']])
+    wandb.log({"cluster_assignments": assignments_table})
+    
+    # Calculate feature importance as z-scores
+    feature_importance = {}
+    for cluster in np.unique(labels):
+        if cluster == -1:  # Skip noise points
+            continue
+            
+        mask = labels == cluster
+        cluster_data = df_out[mask]
+        
+        for feature in features:
+            # Calculate z-score
+            feature_mean = cluster_data[feature].mean()
+            overall_mean = df_out[feature].mean()
+            overall_std = df_out[feature].std()
+            
+            if overall_std > 0:
+                z_score = (feature_mean - overall_mean) / overall_std
+                feature_importance[f"cluster_{cluster}_{feature}"] = z_score
+    
+    wandb.log({"feature_importance": feature_importance})
+    
+    profiles = []
+    for cluster in np.unique(labels):
+        if cluster == -1:  # Skip noise
+            continue
+            
+        mask = labels == cluster
+        cluster_data = df_out[mask]
+        
+        # Mean stats to understand cluster characteristics
+        cluster_stats = {feature: cluster_data[feature].mean() for feature in features}
+        
+        # Log cluster info
+        cluster_stats.update({
+            "cluster": int(cluster),
+            "size": int(np.sum(mask)),
+            "percentage": float(np.sum(mask) / len(labels) * 100)
+        })
+        
+        profiles.append(cluster_stats)
+    
+    # Log as table
+    profile_df = pd.DataFrame(profiles).set_index('cluster')
+    profile_table = wandb.Table(dataframe=profile_df.reset_index())
+    wandb.log({"cluster_profile": profile_table})
 
 def train():
     run = wandb.init()
+
+    # Tagging for the run
+    algorithm = run.config['algorithm']
+    n_clusters = run.config.get('n_clusters', 'auto')
+    feature_count = len(features)
+    wandb.run.tags = [
+        algorithm, 
+        f"clusters_{n_clusters}",
+        f"features_{feature_count}",
+        "pca" if run.config.get('use_pca', False) else "no_pca"
+    ]
     
     df = pd.read_csv('data/processed/financial_features_2010.csv')
     
-    # Get features for this run
-    selected_features = select_features(
-        df,
-        variance_threshold=run.config.variance_threshold,
-        correlation_threshold=run.config.correlation_threshold
-    )
-
-    # Log selected features with their variance
-    wandb.log({
-        "feature_count": len(selected_features),
-        "feature_list": wandb.Table(columns=["Feature", "Variance"], 
-                                data=[[f, float(df[f].var())] for f in selected_features])
-    })
+    # Save tickers for later
+    tickers = df['Unnamed: 0'].copy()
+    df_with_tickers = pd.DataFrame({'ticker': tickers})
     
-    X = df[selected_features].values
-
+    # Select features
+    feature_params = {
+        'variance_threshold': run.config.get('variance_threshold', 0.01),
+        'correlation_threshold': run.config.get('correlation_threshold', 0.7),
+        'top_n': run.config.get('top_n_features', None)
+    }
+    
+    features = select_features(df, **feature_params)
+    X = df[features].values
+    
     # Scaling
-    if run.config.preprocessing == 'standard':
-        scaler = StandardScaler()
-    else:
-        scaler = RobustScaler()
-
+    scaler = RobustScaler() if run.config.get('preprocessing', 'standard') == 'robust' else StandardScaler()
     X_scaled = scaler.fit_transform(X)
     
-    # PCA
-    if run.config.use_pca:
-        pca = PCA(n_components=run.config.pca_variance, random_state=42)
-        X_processed = pca.fit_transform(X_scaled)
-
+    # Apply PCA if configured
+    if run.config.get('use_pca', False):
+        pca_variance = run.config.get('pca_variance', 0.95)
+        pca = PCA(n_components=pca_variance, random_state=42)
+        X_scaled = pca.fit_transform(X_scaled)
         wandb.log({
-            "pca_components_used": pca.n_components_,
-            "explained_variance": sum(pca.explained_variance_ratio_)
+            "pca_components": pca.n_components_,
+            "pca_explained_variance": pca.explained_variance_ratio_.sum()
         })
-    else:
-        X_processed = X_scaled
-
     
-    if run.config.algorithm == "kmeans":
+    # Clustering
+    if run.config['algorithm'] == "kmeans":
         model = KMeans(
-            n_clusters=run.config.n_clusters,
-            max_iter=run.config.kmeans_max_iter,
+            n_clusters=run.config['n_clusters'],
+            max_iter=run.config['kmeans_max_iter'],
             random_state=42
         )
-    elif run.config.algorithm == "hierarchical":
+    elif run.config['algorithm'] == "hierarchical":
         model = AgglomerativeClustering(
-            n_clusters=run.config.n_clusters,
-            linkage=run.config.linkage
+            n_clusters=run.config['n_clusters'],
+            linkage=run.config['linkage']
         )
-    elif run.config.algorithm == 'dbscan':
+    elif run.config['algorithm'] == "dbscan":
         model = DBSCAN(
-            eps=run.config.eps,
-            min_samples=run.config.min_samples
+            eps=run.config['eps'],
+            min_samples=run.config['min_samples']
         )
-    
-    labels = model.fit_predict(X_processed)
-    
-    scores = {}
-
-    # Calculate scores for each algorithm
-    if run.config.algorithm == "dbscan":
-        unique_labels = np.unique(labels)
-        if len(unique_labels) < 2 or (len(unique_labels) == 2 and -1 in unique_labels):
-            scores["silhouette_score"] = -1
-            scores["calinski_harabasz_score"] = -1
-            scores["davies_bouldin_score"] = -1
-        else:
-            mask = labels != -1
-            if np.sum(mask) > 1:
-                scores["silhouette_score"] = metrics.silhouette_score(X_processed[mask], labels[mask])
-                scores["calinski_harabasz_score"] = metrics.calinski_harabasz_score(X_processed[mask], labels[mask])
-                scores["davies_bouldin_score"] = metrics.davies_bouldin_score(X_processed[mask], labels[mask])
-            else:
-                scores["silhouette_score"] = -1
-                scores["calinski_harabasz_score"] = -1
-                scores["davies_bouldin_score"] = -1
-                
-        scores["noise_percentage"] = np.sum(labels == -1) / len(labels)
-        scores["num_clusters"] = len(np.unique(labels[labels != -1]))
     else:
-        scores["silhouette_score"] = metrics.silhouette_score(X_processed, labels)
-        scores["calinski_harabasz_score"] = metrics.calinski_harabasz_score(X_processed, labels)
-        scores["davies_bouldin_score"] = metrics.davies_bouldin_score(X_processed, labels)
-        scores["num_clusters"] = len(np.unique(labels))
+        raise ValueError(f"Unknown algorithm: {run.config['algorithm']}")
     
-    # For KMeans, log inertia and feature importance
-    if run.config.algorithm == "kmeans":
-        scores["inertia"] = model.inertia_
-        
-        centers = model.cluster_centers_
-        feature_importance = np.var(centers, axis=0)
-        sorted_idx = np.argsort(-feature_importance)[:10]
-        
-        importance_table = wandb.Table(
-            columns=["Feature", "Importance"],
-            data=[[selected_features[i], float(feature_importance[i])] for i in sorted_idx]
-        )
-        
-        wandb.log({"top_features": importance_table})
+    labels = model.fit_predict(X_scaled)
+    
+    metrics_dict = calculate_metrics(X_scaled, labels)
+    
+    wandb.log(metrics_dict)
+    wandb.log({"feature_count": len(features)})
+    wandb.log({"features": features})
+    
+    log_cluster_info(df_with_tickers, features, labels)
+    
+    return metrics_dict['combined_score']
 
-    if scores["silhouette_score"] > 0:
-        # Normalize DB score (lower is better)
-        db_normalized = 1 / (1 + scores["davies_bouldin_score"])
-        
-        # Create combined score - weighted average
-        combined_score = (
-            0.4 * scores["silhouette_score"] + 
-            0.4 * (scores["calinski_harabasz_score"] / 1000) +  # Scale down CH score
-            0.2 * db_normalized
-        )
-        
-        scores["combined_score"] = combined_score
-    
-    # Log cluster distribution as a table instead of dictionary
-    unique, counts = np.unique(labels, return_counts=True)
-    
-    # Create a proper table visualization
-    cluster_table = wandb.Table(columns=["Cluster", "Count", "Percentage"])
-    total = len(labels)
-    for cluster, count in zip(unique, counts):
-        cluster_name = "Noise" if cluster == -1 else f"Cluster {cluster}"
-        percentage = (count/total) * 100
-        cluster_table.add_data(cluster_name, int(count), float(percentage))
-    
-    wandb.log({
-        "cluster_distribution_table": cluster_table,
-        "cluster_count": len(unique)
-    })
-    
-    # Store original dictionary in summary only
-    cluster_distribution = dict(zip([str(u) for u in unique], counts.tolist()))
-    wandb.run.summary["cluster_sizes"] = cluster_distribution
-
-    wandb.log(scores)
-
-def main():
-    # Initialize sweep
-    sweep_id = wandb.sweep(sweep_config, project="thesis_clustering_portfolio")
-    
-    # Run the sweep
-    wandb.agent(sweep_id, train, count=50)  # No. of experiments
 
 if __name__ == "__main__":
-    main()
+    wandb.agent(wandb.sweep(sweep_config), train, count=50)

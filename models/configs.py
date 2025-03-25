@@ -40,30 +40,33 @@ sweep_config = {
     },
     'parameters': {
         'preprocessing': {
-            'values': ['standard'] # Scaling approaches
+            'values': ['robust'] # Scaling approaches
         },
         'algorithm': {
-            'values': ['hierarchical']
+            'values': ['hierarchical', 'kmeans', 'dbscan']
+        },
+        'top_n_features': {
+        'values': [5, 10, 20, 25, 30] 
         },
         'n_clusters': {
-            'min': 3,
-            'max': 50
+            'min': 5,
+            'max': 10
         },
         'variance_threshold': {
-            'values': [0.02]
+            'values': [0.01, 0.02, 0.05]
         },
         'correlation_threshold': {
-            'values': [0.8]
+            'values': [0.75, 0.85, 0.9]
         },
         'use_pca': {
-            'values': [True]
+            'values': [True, False]
         },
         'pca_variance': {
             'values': [0.8, 0.9, 0.95]
         },
         # KMeans specific parameters
         'kmeans_max_iter': {
-            'values': [500, 1000, 1250]
+            'values': [1500]
         },
         # Hierarchical specific parameters
         'linkage': {
@@ -77,7 +80,7 @@ sweep_config = {
         'min_samples': {
             'distribution': 'int_uniform',
             'min': 5,
-            'max': 30
+            'max': 15
         }
     }
 }
