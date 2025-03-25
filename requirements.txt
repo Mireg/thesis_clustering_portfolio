@@ -8,3 +8,4 @@ ipykernel
 seaborn
 scipy
 wandb
+plotly
