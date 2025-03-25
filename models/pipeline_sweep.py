@@ -92,20 +92,39 @@ def calculate_metrics(X, labels):
     metrics_dict.update({
         'wcss': wcss,
         'bcss': bcss,
-        'explained_variance': bcss/(wcss + bcss) if (wcss + bcss) != 0 else 0
+        'explained_variance': bcss/(wcss + bcss) if (wcss + bcss) != 0 else 0,
+        'noise_pct': np.mean(labels == -1)*100
     })
     
+    # Calculate number of clusters (excluding noise)
     unique_labels = np.unique(labels)
-    if len(unique_labels) > 1:
-        mask = labels != -1
-        if np.sum(mask) > 1:
+    num_clusters = len(unique_labels) - (1 if -1 in unique_labels else 0)
+    metrics_dict['num_clusters'] = num_clusters
+    
+    # Skip metric calculations if we don't have at least 2 different clusters
+    try:
+        # The function will automatically filter out noise points (-1)
+        non_noise_mask = labels != -1
+        if np.sum(non_noise_mask) > 1 and len(np.unique(labels[non_noise_mask])) >= 2:
             metrics_dict.update({
-                'silhouette': metrics.silhouette_score(X[mask], labels[mask]),
-                'calinski': metrics.calinski_harabasz_score(X[mask], labels[mask]),
-                'db_score': metrics.davies_bouldin_score(X[mask], labels[mask]),
-                'num_clusters': len(unique_labels) - (1 if -1 in unique_labels else 0),
-                'noise_pct': np.mean(labels == -1)*100
+                'silhouette': metrics.silhouette_score(X[non_noise_mask], labels[non_noise_mask]),
+                'calinski': metrics.calinski_harabasz_score(X[non_noise_mask], labels[non_noise_mask]),
+                'db_score': metrics.davies_bouldin_score(X[non_noise_mask], labels[non_noise_mask])
             })
+        else:
+            metrics_dict.update({
+                'silhouette': 0,
+                'calinski': 0,
+                'db_score': 10
+            })
+    except Exception as e:
+        # Fallback values if any errors occur
+        metrics_dict.update({
+            'silhouette': 0,
+            'calinski': 0,
+            'db_score': 10,
+            'error': str(e)
+        })
     
     metrics_dict['combined_score'] = calculate_combined_score(metrics_dict)
     return metrics_dict
@@ -123,8 +142,14 @@ def log_cluster_info(df, features, labels):
     assignments_table = wandb.Table(dataframe=df_out[['ticker', 'cluster']])
     wandb.log({"cluster_assignments": assignments_table})
     
+    # Skip the rest if no non-noise clusters
+    if not any(label != -1 for label in np.unique(labels)):
+        return
+    
     # Calculate feature importance as z-scores
     feature_importance = {}
+    profiles = []
+    
     for cluster in np.unique(labels):
         if cluster == -1:  # Skip noise points
             continue
@@ -141,21 +166,11 @@ def log_cluster_info(df, features, labels):
             if overall_std > 0:
                 z_score = (feature_mean - overall_mean) / overall_std
                 feature_importance[f"cluster_{cluster}_{feature}"] = z_score
-    
-    wandb.log({"feature_importance": feature_importance})
-    
-    profiles = []
-    for cluster in np.unique(labels):
-        if cluster == -1:  # Skip noise
-            continue
-            
-        mask = labels == cluster
-        cluster_data = df_out[mask]
         
         # Mean stats to understand cluster characteristics
         cluster_stats = {feature: cluster_data[feature].mean() for feature in features}
         
-        # Log cluster info
+        # Add basic cluster info
         cluster_stats.update({
             "cluster": int(cluster),
             "size": int(np.sum(mask)),
@@ -163,25 +178,18 @@ def log_cluster_info(df, features, labels):
         })
         
         profiles.append(cluster_stats)
-    
-    # Log as table
+
+    # Simply return if profiles list is empty
+    if not profiles:
+        return
+        
+    wandb.log({"feature_importance": feature_importance})
     profile_df = pd.DataFrame(profiles).set_index('cluster')
     profile_table = wandb.Table(dataframe=profile_df.reset_index())
     wandb.log({"cluster_profile": profile_table})
 
 def train():
     run = wandb.init()
-
-    # Tagging for the run
-    algorithm = run.config['algorithm']
-    n_clusters = run.config.get('n_clusters', 'auto')
-    feature_count = len(features)
-    wandb.run.tags = [
-        algorithm, 
-        f"clusters_{n_clusters}",
-        f"features_{feature_count}",
-        "pca" if run.config.get('use_pca', False) else "no_pca"
-    ]
     
     df = pd.read_csv('data/processed/financial_features_2010.csv')
     
@@ -198,7 +206,22 @@ def train():
     
     features = select_features(df, **feature_params)
     X = df[features].values
-    
+
+    # for calculating cluster stats later
+    df_with_tickers = pd.DataFrame({'ticker': tickers})
+    df_with_tickers[features] = df[features]
+
+    # Tagging for the run after features where chosen
+    algorithm = run.config['algorithm']
+    n_clusters = run.config.get('n_clusters', 'auto')
+    feature_count = len(features)
+    wandb.run.tags = [
+        algorithm, 
+        f"clusters_{n_clusters}",
+        f"features_{feature_count}",
+        "pca" if run.config.get('use_pca', False) else "no_pca"
+    ]
+
     # Scaling
     scaler = RobustScaler() if run.config.get('preprocessing', 'standard') == 'robust' else StandardScaler()
     X_scaled = scaler.fit_transform(X)

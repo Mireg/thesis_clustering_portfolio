@@ -33,6 +33,7 @@ FEATURE_GROUPS = {
 }
 
 sweep_config = {
+    'project': 'thesis_clustering_portfolio',
     'method': 'bayes',  # 'grid', 'random' or 'bayes'
     'metric': {
         'name': 'combined_score',
@@ -74,7 +75,7 @@ sweep_config = {
         },
         # DBSCAN specific parameters
         'eps': {
-            'min': 0.3,
+            'min': 0.5,
             'max': 1.2
         },
         'min_samples': {
