@@ -44,14 +44,14 @@ sweep_config = {
             'values': ['robust'] # Scaling approaches
         },
         'algorithm': {
-            'values': ['hierarchical', 'kmeans', 'dbscan']
+            'values': ['dbscan']#'hierarchical', 'kmeans', 'dbscan']
         },
         'top_n_features': {
         'values': [5, 10, 20, 25, 30] 
         },
         'n_clusters': {
             'min': 5,
-            'max': 10
+            'max': 15
         },
         'variance_threshold': {
             'values': [0.01, 0.02, 0.05]
@@ -75,13 +75,16 @@ sweep_config = {
         },
         # DBSCAN specific parameters
         'eps': {
-            'min': 0.5,
-            'max': 1.2
+            'min': 0.1,
+            'max': 10.0
         },
         'min_samples': {
             'distribution': 'int_uniform',
-            'min': 5,
-            'max': 15
+            'min': 2,
+            'max': 30
+        },
+        'metric': {
+        'values': ['euclidean', 'manhattan', 'cosine']
         }
     }
 }
