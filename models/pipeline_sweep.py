@@ -251,7 +251,8 @@ def train():
     elif run.config['algorithm'] == "dbscan":
         model = DBSCAN(
             eps=run.config['eps'],
-            min_samples=run.config['min_samples']
+            min_samples=run.config['min_samples'],
+            etric=run.config.get('metric', 'euclidean')
         )
     else:
         raise ValueError(f"Unknown algorithm: {run.config['algorithm']}")
@@ -270,4 +271,4 @@ def train():
 
 
 if __name__ == "__main__":
-    wandb.agent(wandb.sweep(sweep_config), train, count=150)
+    wandb.agent(wandb.sweep(sweep_config), train, count=30)
