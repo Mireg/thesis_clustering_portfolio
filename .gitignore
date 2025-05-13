@@ -6,3 +6,4 @@ data/intermediate/json/*
 notes.md
 wandb/
 *.wandb
+data/stock_prices/*
